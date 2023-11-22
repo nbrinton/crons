@@ -1,72 +1,29 @@
-import smtplib
+import mailtrap as mt
 import os
 import requests
-import mailtrap as mt
 
 # Open Meteo variables
 om_base_url = 'https://api.open-meteo.com'
 om_version = 'v1'
 
 
-def send_email():
+def send_email(freezing_days):
+    message = 'There are some chilly days headed your way!\n'
+
+    for day in freezing_days:
+        message += f'{day[0]}: {day[1]}\n'
+
     # create mail object
     mail = mt.Mail(
-        sender=mt.Address(email="mailtrap@nbrinton.dev", name="Mailtrap Test"),
-        to=[mt.Address(email="nathanbrinton@outlook.com")],
-        subject="You are awesome!",
-        text="Congrats for sending test email with Mailtrap!",
+        sender=mt.Address(email='mycrons@nbrinton.dev', name='MyCrons at nbrintondev'),
+        to=[mt.Address(email='nathanbrinton@outlook.com')],
+        subject='Freeze Alert',
+        text=message,
     )
 
     # create client and send
-    client = mt.MailtrapClient(token=os.environ["MAILTRAP_SMTP_PASSWORD"])
+    client = mt.MailtrapClient(token=os.environ['MAILTRAP_SMTP_PASSWORD'])
     client.send(mail)
-
-
-# def send_email():
-#     sender = "Private Person <mailtrap@nbrinton.dev>"
-#     receiver = "A Test User <nab.natethegreat@gmail.com>"
-#
-#     message = f"""\
-#         Subject: Hi Mailtrap
-#         To: {receiver}
-#         From: {sender}
-#
-#         This is a test e-mail message."""
-#
-#     with smtplib.SMTP("live.smtp.mailtrap.io", 587) as server:
-#         server.connect("live.smtp.mailtrap.io", 587)
-#         # server.ehlo()
-#         server.starttls()
-#         # server.ehlo()
-#         server.login(os.environ["MAILTRAP_SMTP_USERNAME"], os.environ["MAILTRAP_SMTP_PASSWORD"])
-#         server.sendmail(sender, receiver, message)
-
-
-# Mailtrap variables
-# sender = "Private Person <mailtrap@nbrinton.dev>"
-# receiver = "A Test User <nab.natethegreat@gmail.com>"
-
-
-# def send_email(fdays):
-#     sender = "Private Person <mailtrap@nbrinton.dev>"
-#     receiver = "A Test User <nab.natethegreat@gmail.com>"
-#
-#     message = f"""\
-#     Subject: Hi Mailtrap
-#     To: {receiver}
-#     From: {sender}
-#
-#     This is a test e-mail message."""
-#     # for fday in fdays:
-#     #     message += f'{fday[0]}: {fday[1]}/'
-#
-#     with smtplib.SMTP("live.smtp.mailtrap.io", 587) as server:
-#         server.connect("live.smtp.mailtrap.io", 587)
-#         server.ehlo()
-#         server.starttls()
-#         server.ehlo()
-#         server.login(os.environ["MAILTRAP_SMTP_USERNAME"], os.environ["MAILTRAP_SMTP_PASSWORD"])
-#         server.sendmail(sender, receiver, message)
 
 
 if __name__ == '__main__':
@@ -89,11 +46,6 @@ if __name__ == '__main__':
     # Combine the disparate arrays into one array of tuples
     data = zip(days, temp_2m_mins, temp_apparent_mins)
 
-    # TODO: Trying to programmatically grab the array for each key to then combine using zip instead of manually
-    #  specifying keys
-    # for k, v in j.items():
-    #     data[k] =
-
     freezing_days = []
 
     for d in data:
@@ -109,24 +61,4 @@ if __name__ == '__main__':
             print(f'{str(d)} NOPE: {temp_2m_min}')
 
     if len(freezing_days) > 0:
-        send_email()
-        # send_email(freezing_days)
-        # print('TODO: send email')
-
-# sender = "Private Person <mailtrap@nbrinton.dev>"
-# receiver = "A Test User <nab.natethegreat@gmail.com>"
-#
-# message = f"""\
-# Subject: Hi Mailtrap
-# To: {receiver}
-# From: {sender}
-#
-# This is a test e-mail message."""
-#
-# with smtplib.SMTP("live.smtp.mailtrap.io", 587) as server:
-#     server.connect("live.smtp.mailtrap.io", 587)
-#     # server.ehlo()
-#     server.starttls()
-#     # server.ehlo()
-#     server.login(os.environ["MAILTRAP_SMTP_USERNAME"], os.environ["MAILTRAP_SMTP_PASSWORD"])
-#     server.sendmail(sender, receiver, message)
+        send_email(freezing_days=freezing_days)
