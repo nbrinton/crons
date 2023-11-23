@@ -30,6 +30,7 @@ def send_email(freezing_days):
     client = mt.MailtrapClient(token=os.environ['MAILTRAP_SMTP_PASSWORD'])
     client.send(mail)
 
+
 def my_way():
     payload = {
         'forecast_days': 16,
@@ -113,7 +114,112 @@ def meteo_way():
     daily_dataframe = pd.DataFrame(data=daily_data)
     print(daily_dataframe)
 
+    return daily_dataframe
+
+
+def new_mail(table):
+    # import base64
+    # from pathlib import Path
+
+    # import mailtrap as mt
+
+    # welcome_image = Path(__file__).parent.joinpath("welcome.png").read_bytes()
+
+    html = """
+        <!doctype html>
+        <html>
+          <head>
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+          </head>
+          <body style="font-family: sans-serif;">
+            <div style="display: block; margin: auto; max-width: 600px;" class="main">
+              <h1 style="font-size: 18px; font-weight: bold; margin-top: 20px">
+                Incoming freezing temps!
+              </h1>
+              <p>There's some chilly weather headed your way! Make sure to keep that heater on and have come cocoa nearby!</p>
+              """
+
+    html += table
+
+    html += """
+                </div>
+                <!-- Example of invalid for email html/css, will be detected by Mailtrap: -->
+                <style>
+                  .main { background-color: white; }
+                  a:hover { border-left-width: 1em; min-height: 2em; }
+                  
+                  table { width: 100%; }
+                  
+                  tr:nth-child(even) { background-color: #D6EEEE; }
+                  
+                  th, td { width: 100px; max-width: 100px; }
+                  th { text-align: left; }
+                </style>
+              </body>
+            </html>
+            """
+
+    mail = mt.Mail(
+        sender=mt.Address(email="mycrons@nbrinton.dev", name="MyCrons at nbrinton.dev"),
+        to=[mt.Address(email="nathanbrinton@outlook.com", name="Nathan Brinton")],
+        # cc=[mt.Address(email="cc@email.com", name="Copy to")],
+        # bcc=[mt.Address(email="bcc@email.com", name="Hidden Recipient")],
+        subject="TEST",
+        text="There's some chilly weather coming your way!",
+        html=html,
+        # category="Test",
+        attachments=[
+            # mt.Attachment(
+            #     content=base64.b64encode(welcome_image),
+            #     filename="welcome.png",
+            #     disposition=mt.Disposition.INLINE,
+            #     mimetype="image/png",
+            #     content_id="welcome.png",
+            # )
+        ],
+        headers={"X-MT-Header": "Custom header"},
+        custom_variables={"year": 2023},
+    )
+
+    client = mt.MailtrapClient(token=os.environ['MAILTRAP_KEY'])
+    client.send(mail)
+
+
+def gen_html_table(pdf):
+    pdf.reset_index()
+
+    html = """
+    <table>
+        <tr>
+            <th>Date</th>
+            <th>Apparent Min Temp</th>
+            <th>Min Temp 2 Meters above ground</th>
+        </tr>
+    """
+
+    for index, row in pdf.iterrows():
+        day = row['date'].strftime("%Y-%m-%d")
+        min_apparent = round(row["apparent_temperature_min"], 1)
+        min_2m_above = round(row["temperature_2m_min"], 1)
+
+        html += f'\n\t\t<tr>\n\t\t\t<td>{day}</td><td>{min_apparent}</td><td>{min_2m_above}</td>\n\t\t</tr>'
+
+        # html += f'\n\t\t<tr>\n\t\t\t<td>{row["apparent_temperature_min"]}</td><td>{row["temperature_2m_min"]}</td>\n\t\t</tr>'
+
+    html += '</table'
+
+    return html
+
 
 if __name__ == '__main__':
     # my_way()
-    meteo_way()
+    df = meteo_way()
+
+    table = gen_html_table(df)
+
+    new_mail(table)
+
+    # df.reset_index()
+    #
+    # for index, row in df.iterrows():
+    #     print()
