@@ -1,18 +1,15 @@
-import openmeteo_requests
-import requests_cache
+import mailtrap as mt
+import openmeteo_requests as omr
+import os
 import pandas as pd
+import requests
+import requests_cache
 from retry_requests import retry
 
-import mailtrap as mt
-import os
-import requests
 
-# Open Meteo variables
-om_base_url = 'https://api.open-meteo.com'
-om_version = 'v1'
+def my_simple_email(freezing_days):
+    # My first stab at sending a simple email using the list of freezing_days from my_simple_way()
 
-
-def send_email(freezing_days):
     message = 'There are some chilly days headed your way!\n'
 
     for day in freezing_days:
@@ -31,7 +28,13 @@ def send_email(freezing_days):
     client.send(mail)
 
 
-def my_way():
+def my_simple_way():
+    # My first stab at requesting Open Meteo data and doing some ETL on it
+
+    # Open Meteo variables
+    om_base_url = 'https://api.open-meteo.com'
+    om_version = 'v1'
+
     payload = {
         'forecast_days': 16,
         'latitude': 43.582030,
@@ -66,14 +69,14 @@ def my_way():
             print(f'{str(d)} NOPE: {temp_2m_min}')
 
     if len(freezing_days) > 0:
-        send_email(freezing_days=freezing_days)
+        my_simple_email(freezing_days=freezing_days)
 
 
 def meteo_way():
     # Setup the Open-Meteo API client with cache and retry on error
     cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
     retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    openmeteo = openmeteo_requests.Client(session=retry_session)
+    openmeteo = omr.Client(session=retry_session)
 
     # Make sure all required weather variables are listed here
     # The order of variables in hourly or daily is important to assign them correctly below
@@ -102,29 +105,22 @@ def meteo_way():
     daily_temperature_2m_min = daily.Variables(0).ValuesAsNumpy()
     daily_apparent_temperature_min = daily.Variables(1).ValuesAsNumpy()
 
-    daily_data = {"date": pd.date_range(
-        start=pd.to_datetime(daily.Time(), unit="s"),
-        end=pd.to_datetime(daily.TimeEnd(), unit="s"),
-        freq=pd.Timedelta(seconds=daily.Interval()),
-        inclusive="left"
-    )}
-    daily_data["temperature_2m_min"] = daily_temperature_2m_min
-    daily_data["apparent_temperature_min"] = daily_apparent_temperature_min
+    daily_data = {
+        "date": pd.date_range(
+            start=pd.to_datetime(daily.Time(), unit="s"),
+            end=pd.to_datetime(daily.TimeEnd(), unit="s"),
+            freq=pd.Timedelta(seconds=daily.Interval()),
+            inclusive="left"),
+        "temperature_2m_min": daily_temperature_2m_min,
+        "apparent_temperature_min": daily_apparent_temperature_min
+    }
 
     daily_dataframe = pd.DataFrame(data=daily_data)
-    print(daily_dataframe)
 
     return daily_dataframe
 
 
-def new_mail(table):
-    # import base64
-    # from pathlib import Path
-
-    # import mailtrap as mt
-
-    # welcome_image = Path(__file__).parent.joinpath("welcome.png").read_bytes()
-
+def send_email(table):
     html = """
         <!doctype html>
         <html>
@@ -148,10 +144,7 @@ def new_mail(table):
                   .main { background-color: white; }
                   a:hover { border-left-width: 1em; min-height: 2em; }
                   
-                  table { width: 100%; }
-                  
                   tr:nth-child(even) { background-color: #D6EEEE; }
-                  
                   th, td { width: 100px; max-width: 100px; }
                   th { text-align: left; }
                 </style>
@@ -162,23 +155,8 @@ def new_mail(table):
     mail = mt.Mail(
         sender=mt.Address(email="mycrons@nbrinton.dev", name="MyCrons at nbrinton.dev"),
         to=[mt.Address(email="nathanbrinton@outlook.com", name="Nathan Brinton")],
-        # cc=[mt.Address(email="cc@email.com", name="Copy to")],
-        # bcc=[mt.Address(email="bcc@email.com", name="Hidden Recipient")],
-        subject="TEST",
-        text="There's some chilly weather coming your way!",
+        subject="Freeze Alert",
         html=html,
-        # category="Test",
-        attachments=[
-            # mt.Attachment(
-            #     content=base64.b64encode(welcome_image),
-            #     filename="welcome.png",
-            #     disposition=mt.Disposition.INLINE,
-            #     mimetype="image/png",
-            #     content_id="welcome.png",
-            # )
-        ],
-        headers={"X-MT-Header": "Custom header"},
-        custom_variables={"year": 2023},
     )
 
     client = mt.MailtrapClient(token=os.environ['MAILTRAP_KEY'])
@@ -186,40 +164,69 @@ def new_mail(table):
 
 
 def gen_html_table(pdf):
-    pdf.reset_index()
+    # Generate an html table from the given pandas dataframe object
 
     html = """
-    <table>
-        <tr>
-            <th>Date</th>
-            <th>Apparent Min Temp</th>
-            <th>Min Temp 2 Meters above ground</th>
-        </tr>
-    """
+        <table>
+            <tr>
+                <th style='width: 20px'></th>
+                <th>Day</th>
+                <th>Date</th>
+                <th>Apparent Min Temp</th>
+                <th>Min Temp 2 Meters above ground</th>
+            </tr>
+        """
 
+    # Source: https://stackoverflow.com/a/16476974/9684087
+    pdf.reset_index()
     for index, row in pdf.iterrows():
-        day = row['date'].strftime("%Y-%m-%d")
+        day = row['date'].strftime("%a")
+        date = row['date'].strftime("%Y-%m-%d")
         min_apparent = round(row["apparent_temperature_min"], 1)
         min_2m_above = round(row["temperature_2m_min"], 1)
 
-        html += f'\n\t\t<tr>\n\t\t\t<td>{day}</td><td>{min_apparent}</td><td>{min_2m_above}</td>\n\t\t</tr>'
+        # Set row style
+        color = ""
+        icon = "&#127774;"  # Smiling sun: https://www.utf8icons.com/character/127774/sun-with-face
+        if min_apparent <= 32 or min_2m_above <= 32:
+            color = "style='color: blue; font-weight: bold;'"
+            icon = "&#10052;"  # Snowflake: https://www.utf8icons.com/character/10052/snowflake
 
-        # html += f'\n\t\t<tr>\n\t\t\t<td>{row["apparent_temperature_min"]}</td><td>{row["temperature_2m_min"]}</td>\n\t\t</tr>'
+        html += f"""
+                <tr {color}>
+                    <td style='width: 20px;'>{icon}</td>
+                    <td>{day}</td>
+                    <td>{date}</td>
+                    <td>{min_apparent}</td>
+                    <td>{min_2m_above}</td>
+                </tr>
+        """
 
     html += '</table'
 
     return html
 
 
+def get_freezing_days(pdf):
+    # Filter the given pandas dataframe to only days where either temp column is freezing
+    filtered_df = pdf.loc[(pdf['temperature_2m_min'] <= 32) | (pdf['apparent_temperature_min'] <= 32)]
+    return filtered_df
+
+
 if __name__ == '__main__':
-    # my_way()
     df = meteo_way()
+    fdf = get_freezing_days(df)
 
-    table = gen_html_table(df)
+    print(f'All days: ({len(df.index)})')
+    print(df)
 
-    new_mail(table)
+    print(f'Freezing days: ({len(fdf.index)})')
+    print(fdf)
 
-    # df.reset_index()
-    #
-    # for index, row in df.iterrows():
-    #     print()
+    # Only send an email if there are some freezing days
+    if not fdf.empty:
+        table = gen_html_table(df)
+        send_email(table)
+        print('Email sent!')
+    else:
+        print('No freezing days, quitting without sending an email.')
